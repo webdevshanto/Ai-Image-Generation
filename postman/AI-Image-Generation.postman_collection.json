@@ -1,32 +1,36 @@
 {
   "info": {
     "name": "AI Image Generation API",
-    "description": "Local API checks and authentication flow. Valid signup/login requests require a configured Neon database and applied Prisma migration. Postman stores and resends the HttpOnly auth cookie automatically.",
+    "description": "Run Health first, then database-free validation requests. Run the database-backed authentication flow only after configuring Neon and applying the Prisma migration. Postman stores and resends the HttpOnly auth cookie automatically.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     {
       "key": "baseUrl",
       "value": "http://localhost:3000",
-      "type": "string"
+      "type": "string",
+      "description": "Local backend URL. Change this if the server uses another host or port."
     },
     {
       "key": "testEmail",
       "value": "",
-      "type": "string"
+      "type": "string",
+      "description": "Generated automatically before the database-backed registration request."
     },
     {
       "key": "testPassword",
       "value": "Postman-Test-Password-123!",
-      "type": "string"
+      "type": "string",
+      "description": "Local-only test password used by the register and login requests."
     }
   ],
   "item": [
     {
-      "name": "Health",
+      "name": "01 - Health and Status",
+      "description": "These requests can run without Neon or Redis.",
       "item": [
         {
-          "name": "Root plain-text status",
+          "name": "01 - Root status (plain text)",
           "request": {
             "method": "GET",
             "header": [],
@@ -47,7 +51,7 @@
           ]
         },
         {
-          "name": "Health JSON",
+          "name": "02 - Health (JSON)",
           "request": {
             "method": "GET",
             "header": [],
@@ -69,7 +73,7 @@
           ]
         },
         {
-          "name": "Readiness JSON",
+          "name": "03 - Dependency readiness (JSON)",
           "request": {
             "method": "GET",
             "header": [],
@@ -92,10 +96,11 @@
       ]
     },
     {
-      "name": "Authentication",
+      "name": "02 - Authentication",
+      "description": "Run requests in order. Validation checks do not need a database; account creation and login require Neon plus the initial migration.",
       "item": [
         {
-          "name": "Register validation error (no database required)",
+          "name": "01 - Register validation (no database)",
           "request": {
             "method": "POST",
             "header": [
@@ -130,7 +135,7 @@
           ]
         },
         {
-          "name": "Register test user (database required)",
+          "name": "02 - Register test user (Neon required)",
           "request": {
             "method": "POST",
             "header": [
@@ -149,7 +154,7 @@
               }
             },
             "url": "{{baseUrl}}/api/v1/auth/register",
-            "description": "Run after configuring real Neon URLs and applying the Prisma migration. A fresh random email is generated each time."
+            "description": "Requires valid Neon URLs and the initial Prisma migration. Generates a fresh email before each run."
           },
           "event": [
             {
@@ -174,7 +179,7 @@
           ]
         },
         {
-          "name": "Login test user (database required)",
+          "name": "03 - Login test user (Neon required)",
           "request": {
             "method": "POST",
             "header": [
@@ -209,7 +214,7 @@
           ]
         },
         {
-          "name": "Current user (login required)",
+          "name": "04 - Get current user (after login)",
           "request": {
             "method": "GET",
             "header": [],
@@ -230,7 +235,7 @@
           ]
         },
         {
-          "name": "Logout",
+          "name": "05 - Logout",
           "request": {
             "method": "POST",
             "header": [],
@@ -250,7 +255,7 @@
           ]
         },
         {
-          "name": "Current user after logout (401 expected)",
+          "name": "06 - Verify logout (401 expected)",
           "request": {
             "method": "GET",
             "header": [],
