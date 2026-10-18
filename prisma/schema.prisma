@@ -6,3 +6,213 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum GenerationMode {
+  TEXT_TO_IMAGE
+  IMAGE_TO_IMAGE
+  ENHANCE_IMAGE
+}
+
+enum GenerationStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum AssetType {
+  SOURCE
+  RESULT
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  EXPIRED
+  PAST_DUE
+}
+
+enum CreditTransactionType {
+  PURCHASE
+  GENERATION
+  REFUND
+  GRANT
+}
+
+enum FeedbackCategory {
+  BUG
+  FEATURE
+  IMAGE_QUALITY
+  OTHER
+}
+
+enum FeedbackStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+  CLOSED
+}
+
+model User {
+  id                 String              @id @default(cuid())
+  email              String              @unique
+  name               String?
+  passwordHash       String
+  role               UserRole            @default(USER)
+  credits            Int                 @default(0)
+  isActive           Boolean             @default(true)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  generations        GenerationJob[]
+  assets             ImageAsset[]
+  creditTransactions CreditTransaction[]
+  payments           Payment[]
+  subscriptions      Subscription[]
+  feedback           Feedback[]
+
+  @@index([createdAt])
+}
+
+model GenerationJob {
+  id             String           @id @default(cuid())
+  userId         String
+  mode           GenerationMode
+  status         GenerationStatus @default(QUEUED)
+  prompt         String?
+  negativePrompt String?
+  settings       Json?
+  provider       String?
+  model          String?
+  creditsUsed    Int              @default(0)
+  errorCode      String?
+  errorMessage   String?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assets         ImageAsset[]
+  creditTransactions CreditTransaction[]
+  feedback       Feedback[]
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+model ImageAsset {
+  id           String        @id @default(cuid())
+  userId       String
+  generationId String?
+  type         AssetType
+  url          String
+  publicId     String
+  format       String?
+  width        Int?
+  height       Int?
+  createdAt    DateTime      @default(now())
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  generation   GenerationJob? @relation(fields: [generationId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([generationId])
+}
+
+model Plan {
+  id             String         @id @default(cuid())
+  slug           String         @unique
+  name           String
+  priceCents     Int
+  currency       String         @default("USD")
+  monthlyCredits Int
+  isActive       Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  payments       Payment[]
+  subscriptions  Subscription[]
+}
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  userId               String
+  planId               String
+  status               SubscriptionStatus @default(ACTIVE)
+  provider             String?
+  providerReference    String?            @unique
+  currentPeriodStart   DateTime           @default(now())
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean            @default(false)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan                 Plan               @relation(fields: [planId], references: [id], onDelete: Restrict)
+  payments             Payment[]
+
+  @@index([userId, status])
+}
+
+model Payment {
+  id                    String        @id @default(cuid())
+  userId                String
+  planId                String?
+  subscriptionId        String?
+  provider              String
+  providerPaymentId     String?       @unique
+  amountCents           Int
+  currency              String        @default("USD")
+  status                PaymentStatus @default(PENDING)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  user                  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan                  Plan?         @relation(fields: [planId], references: [id], onDelete: SetNull)
+  subscription          Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  creditTransaction     CreditTransaction?
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+model CreditTransaction {
+  id             String                @id @default(cuid())
+  userId         String
+  paymentId      String?               @unique
+  generationId   String?
+  type           CreditTransactionType
+  amount         Int
+  description    String
+  createdAt      DateTime              @default(now())
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payment        Payment?              @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  generation     GenerationJob?        @relation(fields: [generationId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+}
+
+model Feedback {
+  id           String           @id @default(cuid())
+  userId       String
+  generationId String?
+  category     FeedbackCategory
+  status       FeedbackStatus   @default(OPEN)
+  rating       Int?
+  message      String
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  generation   GenerationJob?   @relation(fields: [generationId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}

@@ -8,11 +8,19 @@
   },
   "packageManager": "pnpm@12.11.2",
   "scripts": {
-    "format": "prettier --write package.json tsconfig.json eslint.config.mjs prisma.config.ts",
-    "format:check": "prettier --check package.json tsconfig.json eslint.config.mjs prisma.config.ts",
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc --project tsconfig.json",
+    "start": "node dist/server.js",
+    "format": "prettier --write 'src/**/*.ts' 'prisma/**/*.ts' package.json tsconfig.json eslint.config.mjs prisma.config.ts pnpm-workspace.yaml",
+    "format:check": "prettier --check 'src/**/*.ts' 'prisma/**/*.ts' package.json tsconfig.json eslint.config.mjs prisma.config.ts pnpm-workspace.yaml",
     "lint": "eslint .",
+    "test": "vitest run",
     "prisma:generate": "prisma generate",
-    "prisma:validate": "prisma validate"
+    "prisma:validate": "prisma validate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "prisma db seed",
+    "db:studio": "prisma studio"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.2.0",
