@@ -85,7 +85,7 @@
     },
     {
       "name": "Auth",
-      "description": "Run in order: Create account, Verify email, Sign in, Current user. Requires the migrated Neon database.",
+      "description": "Run in order: Create account, Verify email, Sign in, Current user. Create account emails an OTP; Verify email creates the account after validation.",
       "item": [
         {
           "name": "Create account",
@@ -99,7 +99,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"firstName\": \"Postman\",\n  \"lastName\": \"Test\",\n  \"email\": \"postman-test@example.com\",\n  \"password\": \"Postman-Test-Password-123!\",\n  \"confirmPassword\": \"Postman-Test-Password-123!\"\n}",
+              "raw": "{\n  \"firstName\": \"Postman\",\n  \"lastName\": \"Test\",\n  \"email\": \"your-email@gmail.com\",\n  \"password\": \"Postman-Test-Password-123!\",\n  \"confirmPassword\": \"Postman-Test-Password-123!\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -107,7 +107,7 @@
               }
             },
             "url": "{{baseUrl}}/api/v1/auth/register",
-            "description": "Requires the Neon database migration. Change the sample email if you have already registered it; the verification token is emailed or printed in the development terminal."
+            "description": "Replace your-email@gmail.com with an inbox you can access. Only Gmail/Googlemail, Outlook/Hotmail/Live/MSN, and listed Yahoo domains are accepted; known disposable domains are blocked. Signup OTP requests are rate-limited."
           },
           "event": [
             {
@@ -115,8 +115,8 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Registration creates an account', () => pm.response.to.have.status(201));",
-                  "pm.test('Registration returns a user without a password hash', () => { const body = pm.response.json(); pm.expect(body.data.user.email).to.eql('postman-test@example.com'); pm.expect(body.data.user).not.to.have.property('passwordHash'); });"
+                  "pm.test('Signup stores pending details and sends verification OTP', () => pm.response.to.have.status(202));",
+                  "pm.test('Signup requires email verification', () => pm.expect(pm.response.json().data.emailVerificationRequired).to.eql(true));"
                 ]
               }
             }
@@ -126,23 +126,14 @@
           "name": "Verify email",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"token\": \"PASTE_VERIFICATION_TOKEN_HERE\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
+              "raw": "{\n  \"email\": \"your-email@gmail.com\",\n  \"otp\": \"123456\"\n}",
+              "options": { "raw": { "language": "json" } }
             },
             "url": "{{baseUrl}}/api/v1/auth/verify-email",
-            "description": "Replace PASTE_VERIFICATION_TOKEN_HERE with the token from the verification email or development terminal."
+            "description": "Paste the 6-digit code sent after Create account. A valid code verifies the email and creates the account."
           },
           "event": [
             {
@@ -150,7 +141,8 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Email verification succeeds', () => pm.response.to.have.status(200));"
+                  "pm.test('Email verification creates the account', () => pm.response.to.have.status(201));",
+                  "pm.test('Created account is verified and has no password hash', () => { const body = pm.response.json(); pm.expect(body.data.user.emailVerified).to.eql(true); pm.expect(body.data.user).not.to.have.property('passwordHash'); });"
                 ]
               }
             }
@@ -168,7 +160,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"postman-test@example.com\",\n  \"password\": \"Postman-Test-Password-123!\"\n}",
+              "raw": "{\n  \"email\": \"your-email@gmail.com\",\n  \"password\": \"Postman-Test-Password-123!\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -176,7 +168,7 @@
               }
             },
             "url": "{{baseUrl}}/api/v1/auth/login",
-            "description": "Run after Verify email. Postman keeps the HttpOnly token cookie for the following requests."
+            "description": "Run after Verify email creates the account. Postman stores the 15-minute access cookie and 30-day refresh cookie automatically."
           },
           "event": [
             {
@@ -185,7 +177,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Login succeeds', () => pm.response.to.have.status(200));",
-                  "pm.test('Login returns the user', () => pm.expect(pm.response.json().data.user.email).to.eql('postman-test@example.com'));"
+                  "pm.test('Login returns a verified user', () => pm.expect(pm.response.json().data.user.emailVerified).to.eql(true));"
                 ]
               }
             }
@@ -197,7 +189,7 @@
             "method": "GET",
             "header": [],
             "url": "{{baseUrl}}/api/v1/auth/me",
-            "description": "Run after Create account or Sign in. Postman sends the stored token cookie automatically."
+            "description": "Run after Sign in. Postman sends the stored access-token cookie automatically."
           },
           "event": [
             {
@@ -206,7 +198,49 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Current user is authenticated', () => pm.response.to.have.status(200));",
-                  "pm.test('Current user matches the test account', () => pm.expect(pm.response.json().data.user.email).to.eql('postman-test@example.com'));"
+                  "pm.test('Current user has an allowed provider address', () => pm.expect(pm.response.json().data.user.email).to.match(/@(gmail|googlemail|outlook|hotmail|live|msn|yahoo|ymail|rocketmail)\\./i));",
+                  "pm.test('Current user exposes verification state', () => pm.expect(pm.response.json().data.user.emailVerified).to.be.a('boolean'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh session",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/auth/refresh",
+            "description": "Uses the HttpOnly refresh cookie and rotates both cookies. Run this when the 15-minute access token expires; do not send the refresh token in the body."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Session refresh succeeds', () => pm.response.to.have.status(200));",
+                  "pm.test('Refreshed session returns a verified user', () => pm.expect(pm.response.json().data.user.emailVerified).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sign out",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/auth/logout",
+            "description": "Revokes this refresh-token session and clears both auth cookies."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Sign out succeeds', () => pm.response.to.have.status(200));"
                 ]
               }
             }
@@ -216,32 +250,8 @@
     },
     {
       "name": "Account settings",
-      "description": "Run after Sign in. Profile/password/delete need the login cookie; reset tokens come by email or from the development terminal.",
+      "description": "Run after Sign in. Profile/password/delete need the login cookie; reset codes come by email or from the development terminal.",
       "item": [
-        {
-          "name": "Resend verification",
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"postman-test@example.com\"\n}",
-              "options": { "raw": { "language": "json" } }
-            },
-            "url": "{{baseUrl}}/api/v1/auth/email/verification/resend"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Request accepted', () => pm.response.to.have.status(200));"
-                ]
-              }
-            }
-          ]
-        },
         {
           "name": "Forgot password",
           "request": {
@@ -249,7 +259,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"postman-test@example.com\"\n}",
+              "raw": "{\n  \"email\": \"your-email@gmail.com\"\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": "{{baseUrl}}/api/v1/auth/password/forgot"
@@ -273,11 +283,11 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"token\": \"PASTE_RESET_TOKEN_HERE\",\n  \"password\": \"Postman-New-Password-123!\"\n}",
+              "raw": "{\n  \"otp\": \"123456\",\n  \"password\": \"Postman-New-Password-123!\"\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": "{{baseUrl}}/api/v1/auth/password/reset",
-            "description": "Replace PASTE_RESET_TOKEN_HERE with the one-time token from the email or development terminal."
+            "description": "Paste the 6-digit one-time reset code from the email or development terminal into otp before running. It expires in 30 minutes. The new password must be at least 8 characters and include uppercase, lowercase, number, and symbol."
           },
           "event": [
             {
@@ -298,11 +308,11 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"currentPassword\": \"Postman-Test-Password-123!\",\n  \"newPassword\": \"Postman-New-Password-123!\"\n}",
+              "raw": "{\n  \"currentPassword\": \"Postman-Test-Password-123!\",\n  \"newPassword\": \"Postman-New-Password-123!\",\n  \"confirmPassword\": \"Postman-New-Password-123!\"\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": "{{baseUrl}}/api/v1/auth/password",
-            "description": "Requires a signed-in user."
+            "description": "Requires a signed-in user. newPassword and confirmPassword must match; the new password must be at least 8 characters and include uppercase, lowercase, number, and symbol. Changing the password revokes refresh sessions and clears this browser's auth cookies."
           },
           "event": [
             {
@@ -323,11 +333,11 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"firstName\": \"Updated\",\n  \"lastName\": \"Postman User\"\n}",
+              "raw": "{\n  \"firstName\": \"Updated\",\n  \"lastName\": \"Postman User\",\n  \"email\": \"your-new-email@gmail.com\"\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": "{{baseUrl}}/api/v1/auth/me",
-            "description": "Requires a signed-in user."
+            "description": "Requires a signed-in user. Use an unused Gmail, Outlook, or Yahoo address; known disposable domains are blocked and email changes are rate-limited. emailVerified stays false until the new address is verified."
           },
           "event": [
             {
@@ -335,7 +345,34 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Profile update succeeds', () => pm.response.to.have.status(200));"
+                  "pm.test('Profile update succeeds', () => pm.response.to.have.status(200));",
+                  "pm.test('Changed email is unverified until confirmed', () => pm.expect(pm.response.json().data.user.emailVerified).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify changed email",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"your-new-email@gmail.com\",\n  \"otp\": \"123456\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/v1/auth/verify-email",
+            "description": "Run after Update profile. Paste the 6-digit code sent to the new email address."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Changed email verification succeeds', () => pm.response.to.have.status(200));",
+                  "pm.test('Changed email is verified', () => pm.expect(pm.response.json().data.emailVerified).to.eql(true));"
                 ]
               }
             }
@@ -361,26 +398,6 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Account deletion succeeds', () => pm.response.to.have.status(200));"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Sign out",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": "{{baseUrl}}/api/v1/auth/logout",
-            "description": "Clears the HttpOnly token cookie in Postman's cookie jar."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Sign out succeeds', () => pm.response.to.have.status(200));"
                 ]
               }
             }

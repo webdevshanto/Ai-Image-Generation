@@ -9,7 +9,7 @@ import {
   login,
   logout,
   register,
-  resendVerification,
+  refreshSessionHandler,
   resetPasswordHandler,
   updateProfileHandler,
   verifyEmailAddress,
@@ -23,20 +23,28 @@ import {
   verifyEmailSchema,
 } from './auth-input.schema.js';
 import { loginSchema, registerSchema } from './auth.schema.js';
+import {
+  emailChangeLimiter,
+  refreshTokenLimiter,
+  registrationOtpLimiter,
+  verificationOtpLimiter,
+} from './auth-rate-limit.js';
 
 export const authRoutes = Router();
 
-authRoutes.post('/register', validateBody(registerSchema), register);
+authRoutes.post(
+  '/register',
+  ...registrationOtpLimiter,
+  validateBody(registerSchema),
+  register,
+);
 authRoutes.post('/login', validateBody(loginSchema), login);
+authRoutes.post('/refresh', ...refreshTokenLimiter, refreshSessionHandler);
 authRoutes.post(
   '/verify-email',
+  ...verificationOtpLimiter,
   validateBody(verifyEmailSchema),
   verifyEmailAddress,
-);
-authRoutes.post(
-  '/email/verification/resend',
-  validateBody(forgotPasswordSchema),
-  resendVerification,
 );
 authRoutes.post(
   '/password/forgot',
@@ -60,6 +68,7 @@ authRoutes.patch(
   '/me',
   authenticate,
   validateBody(updateProfileSchema),
+  ...emailChangeLimiter,
   updateProfileHandler,
 );
 authRoutes.delete(

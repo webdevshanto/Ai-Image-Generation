@@ -1,5 +1,6 @@
-import type { RequestHandler } from 'express';
+import type { RequestHandler, Response } from 'express';
 import { env } from '../../config/env.js';
+import { UnauthorizedError } from '../../utils/api-error.js';
 import { sendSuccess } from '../../utils/api-response.js';
 import type {
   ChangePasswordInput,
@@ -10,14 +11,17 @@ import type {
   VerifyEmailInput,
 } from './auth-input.schema.js';
 import type { LoginInput, RegisterInput } from './auth.schema.js';
+import { ACCESS_TOKEN_TTL_MS, REFRESH_TOKEN_TTL_MS } from './auth-token.js';
 import {
   changePassword,
+  createAccessToken,
   deleteAccount,
   findCurrentUser,
   loginUser,
   registerUser,
+  revokeRefreshToken,
+  rotateRefreshToken,
   requestPasswordReset,
-  resendVerificationEmail,
   resetPassword,
   updateProfile,
   verifyEmail,
@@ -30,34 +34,63 @@ const cookieOptions = {
   path: '/',
 };
 
+const refreshCookieOptions = {
+  ...cookieOptions,
+  path: '/api/v1/auth',
+};
+
+function setSessionCookies(
+  response: Response,
+  tokens: { accessToken: string; refreshToken: string },
+) {
+  response.cookie('token', tokens.accessToken, {
+    ...cookieOptions,
+    maxAge: ACCESS_TOKEN_TTL_MS,
+  });
+  response.cookie('refreshToken', tokens.refreshToken, {
+    ...refreshCookieOptions,
+    maxAge: REFRESH_TOKEN_TTL_MS,
+  });
+}
+
+function clearSessionCookies(response: Response) {
+  response.clearCookie('token', cookieOptions);
+  response.clearCookie('refreshToken', refreshCookieOptions);
+}
+
 export const register: RequestHandler = async (req, res) => {
   const result = await registerUser(req.body as RegisterInput);
   return sendSuccess(
     req,
     res,
     result.emailSent
-      ? 'Account created. Verify your email before signing in.'
-      : 'Account created, but verification email could not be sent. Request another email to continue.',
-    {
-      user: result.user,
-      emailVerificationRequired: true,
-      emailSent: result.emailSent,
-    },
-    201,
+      ? 'Verification code sent. Verify your email to create the account.'
+      : 'Registration saved, but the verification email could not be sent. Submit the request again to retry.',
+    { email: result.email, emailVerificationRequired: true },
+    202,
   );
 };
 
 export const login: RequestHandler = async (req, res) => {
   const result = await loginUser(req.body as LoginInput);
-  res.cookie('token', result.token, {
-    ...cookieOptions,
-    maxAge: 60 * 60 * 1000,
-  });
+  setSessionCookies(res, result);
   return sendSuccess(req, res, 'Signed in', { user: result.user });
 };
 
-export const logout: RequestHandler = (req, res) => {
-  res.clearCookie('token', cookieOptions);
+export const refreshSessionHandler: RequestHandler = async (req, res) => {
+  const refreshToken = req.cookies?.refreshToken;
+  if (typeof refreshToken !== 'string') {
+    throw new UnauthorizedError('Refresh session is invalid or expired');
+  }
+
+  const result = await rotateRefreshToken(refreshToken);
+  setSessionCookies(res, result);
+  return sendSuccess(req, res, 'Session refreshed', { user: result.user });
+};
+
+export const logout: RequestHandler = async (req, res) => {
+  await revokeRefreshToken(req.cookies?.refreshToken);
+  clearSessionCookies(res);
   return sendSuccess(req, res, 'Signed out', null);
 };
 
@@ -67,19 +100,21 @@ export const getCurrentUser: RequestHandler = async (req, res) => {
 };
 
 export const verifyEmailAddress: RequestHandler = async (req, res) => {
-  const user = await verifyEmail(req.body as VerifyEmailInput);
-  return sendSuccess(req, res, 'Email verified', { user });
-};
+  const result = await verifyEmail(req.body as VerifyEmailInput);
+  if ('user' in result) {
+    return sendSuccess(
+      req,
+      res,
+      'Email verified and account created',
+      { user: result.user },
+      201,
+    );
+  }
 
-export const resendVerification: RequestHandler = async (req, res) => {
-  const body = req.body as ForgotPasswordInput;
-  await resendVerificationEmail(body.email);
-  return sendSuccess(
-    req,
-    res,
-    'If the account needs verification, an email was sent',
-    null,
-  );
+  return sendSuccess(req, res, 'Email verified', {
+    email: result.email,
+    emailVerified: true,
+  });
 };
 
 export const forgotPassword: RequestHandler = async (req, res) => {
@@ -94,11 +129,13 @@ export const forgotPassword: RequestHandler = async (req, res) => {
 
 export const resetPasswordHandler: RequestHandler = async (req, res) => {
   await resetPassword(req.body as ResetPasswordInput);
+  clearSessionCookies(res);
   return sendSuccess(req, res, 'Password reset successfully', null);
 };
 
 export const changePasswordHandler: RequestHandler = async (req, res) => {
   await changePassword(req.user!.id, req.body as ChangePasswordInput);
+  clearSessionCookies(res);
   return sendSuccess(req, res, 'Password changed successfully', null);
 };
 
@@ -107,11 +144,17 @@ export const updateProfileHandler: RequestHandler = async (req, res) => {
     req.user!.id,
     req.body as UpdateProfileInput,
   );
+  if (req.user!.email !== user.email) {
+    res.cookie('token', createAccessToken(user), {
+      ...cookieOptions,
+      maxAge: ACCESS_TOKEN_TTL_MS,
+    });
+  }
   return sendSuccess(req, res, 'Profile updated', { user });
 };
 
 export const deleteAccountHandler: RequestHandler = async (req, res) => {
   await deleteAccount(req.user!.id, req.body as DeleteAccountInput);
-  res.clearCookie('token', cookieOptions);
+  clearSessionCookies(res);
   return sendSuccess(req, res, 'Account deleted', null);
 };
