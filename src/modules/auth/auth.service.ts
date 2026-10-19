@@ -593,6 +593,7 @@ export async function updateProfile(userId: string, input: UpdateProfileInput) {
     throw error;
   }
 
+  let verificationEmailSent: boolean | null = null;
   if (emailChanged) {
     const code = await issueVerificationCode(userId, 24 * 60 * 60 * 1000);
     try {
@@ -602,12 +603,18 @@ export async function updateProfile(userId: string, input: UpdateProfileInput) {
         24 * 60 * 60 * 1000,
         'email-change',
       );
+      verificationEmailSent = true;
     } catch {
+      verificationEmailSent = false;
       console.error('[ERROR] Could not deliver an email verification message');
     }
   }
 
-  return { ...user, emailVerified: Boolean(user.emailVerifiedAt) };
+  return {
+    user: { ...user, emailVerified: Boolean(user.emailVerifiedAt) },
+    emailChanged,
+    verificationEmailSent,
+  };
 }
 
 export async function deleteAccount(userId: string, input: DeleteAccountInput) {

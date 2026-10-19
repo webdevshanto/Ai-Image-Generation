@@ -74,7 +74,9 @@ export const register: RequestHandler = async (req, res) => {
 export const login: RequestHandler = async (req, res) => {
   const result = await loginUser(req.body as LoginInput);
   setSessionCookies(res, result);
-  return sendSuccess(req, res, 'Signed in', { user: result.user });
+  return sendSuccess(req, res, 'Welcome back. You are signed in.', {
+    user: result.user,
+  });
 };
 
 export const refreshSessionHandler: RequestHandler = async (req, res) => {
@@ -85,18 +87,20 @@ export const refreshSessionHandler: RequestHandler = async (req, res) => {
 
   const result = await rotateRefreshToken(refreshToken);
   setSessionCookies(res, result);
-  return sendSuccess(req, res, 'Session refreshed', { user: result.user });
+  return sendSuccess(req, res, 'Your session has been renewed.', {
+    user: result.user,
+  });
 };
 
 export const logout: RequestHandler = async (req, res) => {
   await revokeRefreshToken(req.cookies?.refreshToken);
   clearSessionCookies(res);
-  return sendSuccess(req, res, 'Signed out', null);
+  return sendSuccess(req, res, 'You have been signed out.', null);
 };
 
 export const getCurrentUser: RequestHandler = async (req, res) => {
   const user = await findCurrentUser(req.user!.id);
-  return sendSuccess(req, res, 'Current account', { user });
+  return sendSuccess(req, res, 'Your account details are ready.', { user });
 };
 
 export const verifyEmailAddress: RequestHandler = async (req, res) => {
@@ -105,13 +109,13 @@ export const verifyEmailAddress: RequestHandler = async (req, res) => {
     return sendSuccess(
       req,
       res,
-      'Email verified and account created',
+      'Email verified. Your account is ready.',
       { user: result.user },
       201,
     );
   }
 
-  return sendSuccess(req, res, 'Email verified', {
+  return sendSuccess(req, res, 'Your new email address is verified.', {
     email: result.email,
     emailVerified: true,
   });
@@ -122,7 +126,7 @@ export const forgotPassword: RequestHandler = async (req, res) => {
   return sendSuccess(
     req,
     res,
-    'If an account exists for that email, password reset instructions were sent',
+    'Password recovery request received. If this email is registered, a one-time reset code is on its way; check your inbox and spam folder.',
     null,
   );
 };
@@ -130,31 +134,57 @@ export const forgotPassword: RequestHandler = async (req, res) => {
 export const resetPasswordHandler: RequestHandler = async (req, res) => {
   await resetPassword(req.body as ResetPasswordInput);
   clearSessionCookies(res);
-  return sendSuccess(req, res, 'Password reset successfully', null);
+  return sendSuccess(
+    req,
+    res,
+    'Password reset complete. Sign in with your new password.',
+    null,
+  );
 };
 
 export const changePasswordHandler: RequestHandler = async (req, res) => {
   await changePassword(req.user!.id, req.body as ChangePasswordInput);
   clearSessionCookies(res);
-  return sendSuccess(req, res, 'Password changed successfully', null);
+  return sendSuccess(
+    req,
+    res,
+    'Password changed. Sign in again with your new password.',
+    null,
+  );
 };
 
 export const updateProfileHandler: RequestHandler = async (req, res) => {
-  const user = await updateProfile(
+  const result = await updateProfile(
     req.user!.id,
     req.body as UpdateProfileInput,
   );
-  if (req.user!.email !== user.email) {
-    res.cookie('token', createAccessToken(user), {
+  if (result.emailChanged) {
+    res.cookie('token', createAccessToken(result.user), {
       ...cookieOptions,
       maxAge: ACCESS_TOKEN_TTL_MS,
     });
+
+    return sendSuccess(
+      req,
+      res,
+      result.verificationEmailSent
+        ? 'Profile updated. Verification code sent to the new email address.'
+        : 'Profile updated, but the verification email could not be sent.',
+      {
+        user: result.user,
+        emailVerificationRequired: true,
+        verificationEmailSent: result.verificationEmailSent,
+      },
+    );
   }
-  return sendSuccess(req, res, 'Profile updated', { user });
+
+  return sendSuccess(req, res, 'Your profile details have been saved.', {
+    user: result.user,
+  });
 };
 
 export const deleteAccountHandler: RequestHandler = async (req, res) => {
   await deleteAccount(req.user!.id, req.body as DeleteAccountInput);
   clearSessionCookies(res);
-  return sendSuccess(req, res, 'Account deleted', null);
+  return sendSuccess(req, res, 'Your account has been deleted.', null);
 };

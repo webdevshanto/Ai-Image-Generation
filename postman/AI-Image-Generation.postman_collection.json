@@ -346,7 +346,9 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Profile update succeeds', () => pm.response.to.have.status(200));",
-                  "pm.test('Changed email is unverified until confirmed', () => pm.expect(pm.response.json().data.user.emailVerified).to.eql(false));"
+                  "pm.test('Changed email is unverified until confirmed', () => pm.expect(pm.response.json().data.user.emailVerified).to.eql(false));",
+                  "pm.test('Verification email was sent', () => pm.expect(pm.response.json().data.verificationEmailSent).to.eql(true));",
+                  "pm.test('Response confirms code delivery', () => pm.expect(pm.response.json().message).to.include('Verification code sent'));"
                 ]
               }
             }
