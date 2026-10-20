@@ -60,7 +60,6 @@ function toPublicUser(user: {
   firstName: string | null;
   lastName: string | null;
   role: UserRole;
-  credits: number;
   emailVerifiedAt: Date | null;
   createdAt: Date;
 }) {
@@ -71,7 +70,6 @@ function toPublicUser(user: {
     firstName: user.firstName,
     lastName: user.lastName,
     role: user.role,
-    credits: user.credits,
     emailVerifiedAt: user.emailVerifiedAt,
     emailVerified: Boolean(user.emailVerifiedAt),
     createdAt: user.createdAt,
@@ -99,7 +97,6 @@ export async function loginUser(input: LoginInput) {
   if (!user.emailVerifiedAt) {
     throw new UnauthorizedError('Verify your email before signing in');
   }
-
   const publicUser = {
     id: user.id,
     email: user.email,
@@ -107,7 +104,6 @@ export async function loginUser(input: LoginInput) {
     firstName: user.firstName,
     lastName: user.lastName,
     role: user.role,
-    credits: user.credits,
     emailVerifiedAt: user.emailVerifiedAt,
     emailVerified: Boolean(user.emailVerifiedAt),
     createdAt: user.createdAt,
@@ -174,7 +170,6 @@ export async function rotateRefreshToken(refreshToken: string) {
         firstName: true,
         lastName: true,
         role: true,
-        credits: true,
         isActive: true,
         emailVerifiedAt: true,
         createdAt: true,
@@ -270,7 +265,6 @@ export async function findCurrentUser(userId: string) {
       firstName: true,
       lastName: true,
       role: true,
-      credits: true,
       emailVerifiedAt: true,
       createdAt: true,
     },
@@ -372,7 +366,6 @@ export async function verifyEmail(input: VerifyEmailInput) {
           firstName: true,
           lastName: true,
           role: true,
-          credits: true,
           emailVerifiedAt: true,
           createdAt: true,
         },
@@ -581,7 +574,6 @@ export async function updateProfile(userId: string, input: UpdateProfileInput) {
         firstName: true,
         lastName: true,
         role: true,
-        credits: true,
         emailVerifiedAt: true,
         createdAt: true,
       },

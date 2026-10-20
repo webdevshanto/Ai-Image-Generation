@@ -10,6 +10,12 @@
       "value": "http://localhost:3000",
       "type": "string",
       "description": "Local backend URL. Change this if the server uses another host or port."
+    },
+    {
+      "key": "imageId",
+      "value": "",
+      "type": "string",
+      "description": "Automatically set to the most recently uploaded image or first image in List images. You can also set it manually."
     }
   ],
   "item": [
@@ -76,6 +82,84 @@
                 "exec": [
                   "pm.test('Readiness reports a known dependency state', () => pm.expect([200, 503]).to.include(pm.response.code));",
                   "pm.test('Readiness response is JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Plans",
+      "description": "List plans publicly. Current plan/change requests require Sign in. Free has 5 monthly credits per mode; Pro has 20 per mode; Max is Coming Soon.",
+      "item": [
+        {
+          "name": "List plans",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/plans",
+            "description": "Shows monthly per-mode quotas. Pro pricing is not set yet; Max is unavailable and marked Coming Soon."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Plans endpoint succeeds', () => pm.response.to.have.status(200));",
+                  "pm.test('Plans are ordered Free, Pro, Max', () => pm.expect(pm.response.json().data.plans.map((plan) => plan.slug)).to.eql(['free', 'pro', 'max']));",
+                  "pm.test('Free quota is five per mode', () => { const plans = pm.response.json().data.plans; const free = plans.find((plan) => plan.slug === 'free'); pm.expect(free.creditsPerMode).to.eql({ textToImage: 5, imageToImage: 5, enhanceImage: 5 }); });",
+                  "pm.test('Image upload quotas differ by plan', () => { const plans = pm.response.json().data.plans; const free = plans.find((plan) => plan.slug === 'free'); const pro = plans.find((plan) => plan.slug === 'pro'); pm.expect(free.imageUploads).to.eql({ monthlyLimit: 10, storageLimitBytes: 104857600, storageLimitMegabytes: 100 }); pm.expect(pro.imageUploads).to.eql({ monthlyLimit: 50, storageLimitBytes: 524288000, storageLimitMegabytes: 500 }); });",
+                  "pm.test('Pro quota is twenty per mode', () => { const plans = pm.response.json().data.plans; const pro = plans.find((plan) => plan.slug === 'pro'); pm.expect(pro.creditsPerMode).to.eql({ textToImage: 20, imageToImage: 20, enhanceImage: 20 }); });",
+                  "pm.test('Max is marked Coming Soon', () => { const plans = pm.response.json().data.plans; const max = plans.find((plan) => plan.slug === 'max'); pm.expect(max.comingSoon).to.eql(true); pm.expect(max.available).to.eql(false); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Current plan",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/plans/me",
+            "description": "Requires sign-in. Shows the active plan and any scheduled cancellation."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Current plan request succeeds', () => pm.response.to.have.status(200));",
+                  "pm.test('Current plan is returned', () => pm.expect(pm.response.json().data.plan.slug).to.be.oneOf(['free', 'pro']));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Change plan",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"planSlug\": \"free\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/v1/plans/change",
+            "description": "Requires sign-in. Use planSlug 'free' to request a downgrade; active Pro stays until its current period ends. Pro activation requires checkout and cannot be completed yet. Max is Coming Soon. An administrator can grant complimentary Pro access."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Free plan selection succeeds or is already active', () => pm.expect([200]).to.include(pm.response.code));",
+                  "pm.test('Change result is explained', () => pm.expect(pm.response.json().data.status).to.be.oneOf(['already_active', 'downgrade_scheduled']));"
                 ]
               }
             }
@@ -245,6 +329,194 @@
               }
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "Credits",
+      "description": "Run after Sign in. Displays this user's current UTC-month usage and recent ledger activity.",
+      "item": [
+        {
+          "name": "Credit balance",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/credits",
+            "description": "Requires login. Shows remaining monthly credits separately for Text-to-Image, Image-to-Image, and Enhance Image."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Credit summary succeeds', () => pm.response.to.have.status(200));",
+                  "pm.test('All three generation modes have separate quotas', () => pm.expect(Object.keys(pm.response.json().data.credits.modes)).to.eql(['textToImage', 'imageToImage', 'enhanceImage']));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Credit history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/credits/history",
+            "description": "Requires login. Shows the latest 50 generation charges and refunds."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Images",
+      "description": "Image upload and library endpoints. Sign in first. Free: 10 uploads/month and 100 MB active storage. Pro: 50 uploads/month and 500 MB active storage. Each upload is capped at 10 MB, 4096 x 4096 pixels, and 16 megapixels. Deleting frees storage, not monthly upload count.",
+      "item": [
+        {
+          "name": "Upload image",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/api/v1/images",
+            "description": "Choose a local image in the image form-data field. Postman sets multipart Content-Type automatically. Requires sign-in and Cloudinary credentials. Saves the returned image ID to the imageId collection variable."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Image upload succeeds', () => pm.response.to.have.status(201));",
+                  "pm.test('Uploaded image has metadata but no Cloudinary public ID', () => { const image = pm.response.json().data.image; pm.expect(image.url).to.be.a('string'); pm.expect(image.format).to.be.oneOf(['jpeg', 'png', 'webp']); pm.expect(image.width).to.be.a('number'); pm.expect(image.height).to.be.a('number'); pm.expect(image).not.to.have.property('publicId'); });",
+                  "if (pm.response.code === 201) { const image = pm.response.json().data.image; pm.collectionVariables.set('imageId', image.id); console.log('Saved imageId:', image.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List images",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/images?page=1&limit=20",
+            "description": "Lists only the signed-in user's images. Pagination limit is at most 50."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Image library loads', () => pm.response.to.have.status(200));",
+                  "pm.test('Image library includes pagination', () => pm.expect(pm.response.json().data.pagination).to.have.property('total'));",
+                  "pm.test('Image library reports quota usage', () => { const usage = pm.response.json().data.uploadUsage; pm.expect(usage.monthlyUploads).to.have.keys('used', 'limit', 'remaining'); pm.expect(usage.storage).to.have.keys('usedBytes', 'limitBytes', 'remainingBytes'); });",
+                  "if (pm.response.code === 200) { const images = pm.response.json().data.images; if (images.length > 0) { pm.collectionVariables.set('imageId', images[0].id); console.log('Saved first imageId:', images[0].id); } else { pm.collectionVariables.unset('imageId'); console.log('No images found; imageId cleared.'); } }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get image",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/images/{{imageId}}",
+            "description": "Uses imageId from the most recent successful Upload image or the first item in List images. You can also edit the imageId collection variable. Other users' images return 404."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('imageId')) { throw new Error('imageId is empty. Run Upload image or List images first, or set the imageId collection variable.'); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete image",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/images/{{imageId}}",
+            "description": "Uses imageId from the most recent successful Upload image or the first item in List images. You can also edit the imageId collection variable. Deletes the Cloudinary object and database asset."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('imageId')) { throw new Error('imageId is empty. Run Upload image or List images first, or set the imageId collection variable.'); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Image delete succeeds', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) { pm.collectionVariables.unset('imageId'); console.log('Cleared deleted imageId.'); }"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "description": "Admin-only Pro access management. Sign in using the regular Auth folder first with an ADMIN account. A trusted database operator must assign the ADMIN role; public promotion is unavailable.",
+      "item": [
+        {
+          "name": "Grant Pro access",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"friend@gmail.com\",\n  \"durationDays\": 30,\n  \"note\": \"Complimentary access\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/v1/admin/plan-grants",
+            "description": "Grant the verified account 30 days of Pro access. durationDays must be 1-365. If they already have an active manual grant, the new duration extends it. Requires an ADMIN account."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Manual plan grant succeeds', () => pm.response.to.have.status(201));",
+                  "pm.test('Grant response identifies Pro and expiry', () => { const grant = pm.response.json().data.grant; pm.expect(grant.plan.slug).to.eql('pro'); pm.expect(grant.expiresAt).to.be.a('string'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List manual Pro grants",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/admin/plan-grants",
+            "description": "Lists the latest 100 manual grants with recipient, admin, and expiry details. Requires an ADMIN account."
+          }
         }
       ]
     },

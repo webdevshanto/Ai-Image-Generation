@@ -30,6 +30,12 @@ export class UnauthorizedError extends ApiError {
   }
 }
 
+export class ForbiddenError extends ApiError {
+  constructor(message = 'You do not have permission to perform this action') {
+    super(403, 'FORBIDDEN', message);
+  }
+}
+
 export class NotFoundError extends ApiError {
   constructor(message = 'Resource not found') {
     super(404, 'NOT_FOUND', message);
@@ -39,6 +45,12 @@ export class NotFoundError extends ApiError {
 export class ConflictError extends ApiError {
   constructor(message = 'Resource conflict', details?: unknown) {
     super(409, 'CONFLICT', message, details);
+  }
+}
+
+export class PaymentRequiredError extends ApiError {
+  constructor(message = 'A completed payment is required for this plan') {
+    super(402, 'PAYMENT_REQUIRED', message);
   }
 }
 

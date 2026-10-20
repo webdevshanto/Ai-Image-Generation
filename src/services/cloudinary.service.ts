@@ -1,4 +1,5 @@
 import { v2 as cloudinary } from 'cloudinary';
+import { Readable } from 'node:stream';
 import { env } from '../config/env.js';
 import { ExternalServiceError } from '../utils/api-error.js';
 
@@ -37,6 +38,40 @@ export async function uploadImage(
       resource_type: 'image',
       unique_filename: true,
     });
+  } catch {
+    throw new ExternalServiceError('Cloudinary image upload failed');
+  }
+}
+
+export async function uploadImageBuffer(
+  buffer: Buffer,
+  publicId: string,
+  format: string,
+) {
+  ensureConfigured();
+
+  try {
+    return await new Promise<Awaited<ReturnType<typeof uploadImage>>>(
+      (resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          {
+            resource_type: 'image',
+            format,
+            public_id: publicId,
+            unique_filename: false,
+          },
+          (error, result) => {
+            if (error || !result) {
+              reject(error ?? new Error('Cloudinary returned no image result'));
+              return;
+            }
+            resolve(result);
+          },
+        );
+
+        Readable.from([buffer]).pipe(uploadStream);
+      },
+    );
   } catch {
     throw new ExternalServiceError('Cloudinary image upload failed');
   }

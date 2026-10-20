@@ -73,25 +73,30 @@ enum AuthTokenType {
 }
 
 model User {
-  id                 String              @id @default(cuid())
-  email              String              @unique
-  firstName          String?
-  lastName           String?
-  name               String?
-  passwordHash       String
-  role               UserRole            @default(USER)
-  credits            Int                 @default(0)
-  isActive           Boolean             @default(true)
-  emailVerifiedAt    DateTime?
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
-  generations        GenerationJob[]
-  assets             ImageAsset[]
-  creditTransactions CreditTransaction[]
-  payments           Payment[]
-  subscriptions      Subscription[]
-  feedback           Feedback[]
-  authTokens         AuthToken[]
+  id                      String                   @id @default(cuid())
+  email                   String                   @unique
+  firstName               String?
+  lastName                String?
+  name                    String?
+  passwordHash            String
+  role                    UserRole                 @default(USER)
+  credits                 Int                      @default(0)
+  isActive                Boolean                  @default(true)
+  emailVerifiedAt         DateTime?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  generations             GenerationJob[]
+  assets                  ImageAsset[]
+  imageUploadUsages       ImageUploadUsage[]
+  imageUploadReservations ImageUploadReservation[]
+  creditTransactions      CreditTransaction[]
+  creditUsages            CreditUsage[]
+  payments                Payment[]
+  subscriptions           Subscription[]
+  feedback                Feedback[]
+  authTokens              AuthToken[]
+  planGrantsGiven         PlanGrant[]              @relation("PlanGrantGrantedBy")
+  planGrantsReceived      PlanGrant[]              @relation("PlanGrantRecipient")
 
   @@index([createdAt])
 }
@@ -150,35 +155,69 @@ model GenerationJob {
 }
 
 model ImageAsset {
-  id           String         @id @default(cuid())
-  userId       String
-  generationId String?
-  type         AssetType
-  url          String
-  publicId     String
-  format       String?
-  width        Int?
-  height       Int?
-  createdAt    DateTime       @default(now())
-  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  generation   GenerationJob? @relation(fields: [generationId], references: [id], onDelete: SetNull)
+  id              String         @id @default(cuid())
+  userId          String
+  generationId    String?
+  type            AssetType
+  url             String
+  publicId        String
+  format          String?
+  width           Int?
+  height          Int?
+  fileSizeBytes   Int            @default(0)
+  deletionPending Boolean        @default(false)
+  createdAt       DateTime       @default(now())
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  generation      GenerationJob? @relation(fields: [generationId], references: [id], onDelete: SetNull)
 
   @@index([userId, createdAt])
   @@index([generationId])
 }
 
+model ImageUploadUsage {
+  id          String   @id @default(cuid())
+  userId      String
+  periodStart DateTime
+  uploads     Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, periodStart])
+}
+
+model ImageUploadReservation {
+  id            String   @id
+  userId        String
+  periodStart   DateTime
+  fileSizeBytes Int
+  publicId      String
+  createdAt     DateTime @default(now())
+  expiresAt     DateTime
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
 model Plan {
-  id             String         @id @default(cuid())
-  slug           String         @unique
-  name           String
-  priceCents     Int
-  currency       String         @default("USD")
-  monthlyCredits Int
-  isActive       Boolean        @default(true)
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  payments       Payment[]
-  subscriptions  Subscription[]
+  id                     String         @id @default(cuid())
+  slug                   String         @unique
+  name                   String
+  priceCents             Int?
+  currency               String         @default("USD")
+  monthlyCredits         Int            @default(0)
+  textToImageCredits     Int            @default(0)
+  imageToImageCredits    Int            @default(0)
+  enhanceImageCredits    Int            @default(0)
+  monthlyImageUploads    Int            @default(0)
+  imageStorageLimitBytes Int            @default(0)
+  isActive               Boolean        @default(true)
+  isComingSoon           Boolean        @default(false)
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+  payments               Payment[]
+  subscriptions          Subscription[]
+  grants                 PlanGrant[]
 }
 
 model Subscription {
@@ -196,8 +235,27 @@ model Subscription {
   user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   plan               Plan               @relation(fields: [planId], references: [id], onDelete: Restrict)
   payments           Payment[]
+  grants             PlanGrant[]
 
   @@index([userId, status])
+}
+
+model PlanGrant {
+  id              String        @id @default(cuid())
+  recipientUserId String
+  grantedByUserId String?
+  planId          String
+  subscriptionId  String?
+  durationDays    Int
+  note            String?
+  createdAt       DateTime      @default(now())
+  recipient       User          @relation("PlanGrantRecipient", fields: [recipientUserId], references: [id], onDelete: Cascade)
+  grantedBy       User?         @relation("PlanGrantGrantedBy", fields: [grantedByUserId], references: [id], onDelete: SetNull)
+  plan            Plan          @relation(fields: [planId], references: [id], onDelete: Restrict)
+  subscription    Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  @@index([recipientUserId, createdAt])
+  @@index([grantedByUserId, createdAt])
 }
 
 model Payment {
@@ -228,13 +286,30 @@ model CreditTransaction {
   generationId String?
   type         CreditTransactionType
   amount       Int
+  periodStart  DateTime?
+  mode         GenerationMode?
   description  String
   createdAt    DateTime              @default(now())
   user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   payment      Payment?              @relation(fields: [paymentId], references: [id], onDelete: SetNull)
   generation   GenerationJob?        @relation(fields: [generationId], references: [id], onDelete: SetNull)
 
+  @@unique([generationId, type])
   @@index([userId, createdAt])
+}
+
+model CreditUsage {
+  id          String         @id @default(cuid())
+  userId      String
+  mode        GenerationMode
+  periodStart DateTime
+  used        Int            @default(0)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mode, periodStart])
+  @@index([periodStart])
 }
 
 model Feedback {
