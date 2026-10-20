@@ -36,7 +36,12 @@ export const registerSchema = z
       });
     }
   })
-  .transform(({ confirmPassword: _confirmPassword, ...input }) => input);
+  .transform(({ firstName, lastName, email, password }) => ({
+    firstName,
+    lastName,
+    email,
+    password,
+  }));
 
 export const loginSchema = z.object({
   email: z

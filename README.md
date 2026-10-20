@@ -33,3 +33,38 @@ Deleting an image frees its storage space, but does not restore that month's
 upload count. `GET /api/v1/images` returns current upload and storage usage.
 Existing assets predate byte-size tracking, so the quota migration conservatively
 accounts for each existing asset as 10 MB.
+
+The image library also limits the number of images a user can keep at once:
+Free users can keep 10 images and Pro users can keep 30. Deleting an image
+frees a library slot. Existing libraries over the new limit remain accessible,
+but further uploads are blocked until the count is below the plan limit.
+
+## Monthly generation credits
+
+Free includes 5 credits per image mode and 2 per video mode (16 total):
+Text-to-Image, Image-to-Image, Text-to-Video, Image-to-Video, and Video-to-Video.
+Pro includes 20 credits per image mode and 6 per video mode (58 total).
+Credits reset monthly on the first day in UTC. Video quotas are configured in
+the plans and credit summary; video generations also use these per-mode limits.
+
+## Image generation API
+
+The authenticated `POST /api/v1/generations` endpoint supports
+`text-to-image`, `image-to-image`, `text-to-video`, `image-to-video`, and
+`video-to-video`. Image-guided modes require an owned `sourceImageId`;
+video-to-video requires an owned `sourceVideoId`. The endpoint returns `202`
+and a generation ID. Poll `GET /api/v1/generations/:id` for status and the
+result URL. Generation reserves one monthly credit; failed jobs are refunded.
+Generated media is saved to Cloudinary and the user's matching library.
+
+Configure `GEMINI_API_KEY`, `GEMINI_IMAGE_MODEL` (defaults to
+`gemini-nano-banana-2.1`), `GEMINI_VIDEO_MODEL` (defaults to
+`gemini-omni-1.1-flash`), `CLOUDINARY_*`, and `REDIS_URL`. The same Gemini key
+must have access to the configured image and video models.
+
+Video modes are `text-to-video`, `image-to-video`, and `video-to-video`.
+Upload MP4 source videos through `/api/v1/videos` (25 MB maximum) and use the
+returned ID for video-to-video. Free users can keep 5 videos and Pro users 15.
+Generated video results are also saved in that library. Gemini processing is
+asynchronous through the worker and the result appears in the generation status
+response.

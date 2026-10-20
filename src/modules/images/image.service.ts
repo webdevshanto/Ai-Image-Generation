@@ -75,6 +75,26 @@ async function releaseUploadReservation(
   });
 }
 
+async function cleanupFailedCloudinaryUpload(
+  userId: string,
+  reservation: { id: string; periodStart: Date; publicId: string },
+) {
+  try {
+    const result = await deleteImage(reservation.publicId);
+    if (result.result !== 'ok' && result.result !== 'not found') {
+      throw new ExternalServiceError(
+        'Cloudinary could not clean up the failed upload',
+      );
+    }
+    await releaseUploadReservation(userId, reservation);
+  } catch (cleanupError) {
+    console.error(
+      '[ERROR] Failed upload cleanup retained for retry',
+      cleanupError,
+    );
+  }
+}
+
 async function cleanExpiredUploadReservations(userId: string, now: Date) {
   const expired = await prisma.imageUploadReservation.findMany({
     where: { userId, expiresAt: { lte: now } },
@@ -137,6 +157,18 @@ async function reserveImageUpload(
           _sum: { fileSizeBytes: true },
         }),
       ]);
+      const [assetCount, reservationCount] = await Promise.all([
+        transaction.imageAsset.count({ where: { userId } }),
+        transaction.imageUploadReservation.count({ where: { userId } }),
+      ]);
+      const libraryImagesUsed = assetCount + reservationCount;
+      if (libraryImagesUsed >= plan.libraryImageLimit) {
+        throw new ConflictError('Image library limit reached', {
+          limit: plan.libraryImageLimit,
+          used: libraryImagesUsed,
+        });
+      }
+
       const usedBytes =
         (assets._sum.fileSizeBytes ?? 0) +
         (reservations._sum.fileSizeBytes ?? 0);
@@ -190,7 +222,7 @@ export async function uploadUserImage(
       metadata.format === 'jpeg' ? 'jpg' : metadata.format,
     );
   } catch (error) {
-    await releaseUploadReservation(userId, reservation);
+    await cleanupFailedCloudinaryUpload(userId, reservation);
     throw error;
   }
 
@@ -285,7 +317,16 @@ export async function listUserImages(userId: string, page = 1, limit = 20) {
 
   const now = new Date();
   const periodStart = monthlyPeriodStart(now);
-  const [images, total, plan, usage, assets, reservations] = await Promise.all([
+  const [
+    images,
+    total,
+    plan,
+    usage,
+    assets,
+    reservations,
+    libraryImagesCount,
+    libraryReservationsCount,
+  ] = await Promise.all([
     prisma.imageAsset.findMany({
       where: { userId, deletionPending: false },
       select: {
@@ -317,6 +358,8 @@ export async function listUserImages(userId: string, page = 1, limit = 20) {
       where: { userId },
       _sum: { fileSizeBytes: true },
     }),
+    prisma.imageAsset.count({ where: { userId } }),
+    prisma.imageUploadReservation.count({ where: { userId } }),
   ]);
 
   return {
@@ -335,6 +378,16 @@ export async function listUserImages(userId: string, page = 1, limit = 20) {
         remaining: Math.max(
           0,
           plan.monthlyImageUploads - (usage?.uploads ?? 0),
+        ),
+      },
+      libraryImages: {
+        used: libraryImagesCount + libraryReservationsCount,
+        limit: plan.libraryImageLimit,
+        remaining: Math.max(
+          0,
+          plan.libraryImageLimit -
+            libraryImagesCount -
+            libraryReservationsCount,
         ),
       },
       storage: {

@@ -5,7 +5,7 @@ import { env } from '../../config/env.js';
 import { prisma } from '../../db/prisma.js';
 import { AuthTokenType } from '../../generated/prisma/client.js';
 import type { UserRole } from '../../generated/prisma/client.js';
-import { deleteImage } from '../../services/cloudinary.service.js';
+import { deleteImage, deleteVideo } from '../../services/cloudinary.service.js';
 import { sendAuthEmail } from '../../services/email.service.js';
 import {
   ConflictError,
@@ -615,6 +615,8 @@ export async function deleteAccount(userId: string, input: DeleteAccountInput) {
     select: {
       passwordHash: true,
       assets: { select: { publicId: true } },
+      videoAssets: { select: { publicId: true } },
+      videoUploadReservations: { select: { publicId: true } },
     },
   });
 
@@ -624,6 +626,10 @@ export async function deleteAccount(userId: string, input: DeleteAccountInput) {
 
   try {
     for (const asset of user.assets) await deleteImage(asset.publicId);
+    for (const video of user.videoAssets) await deleteVideo(video.publicId);
+    for (const reservation of user.videoUploadReservations) {
+      await deleteVideo(reservation.publicId);
+    }
   } catch {
     throw new ExternalServiceError(
       'Could not remove stored images; the account was not deleted',

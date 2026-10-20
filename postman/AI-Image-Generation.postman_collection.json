@@ -16,6 +16,18 @@
       "value": "",
       "type": "string",
       "description": "Automatically set to the most recently uploaded image or first image in List images. You can also set it manually."
+    },
+    {
+      "key": "generationId",
+      "value": "",
+      "type": "string",
+      "description": "Automatically set by Create text-to-image generation."
+    },
+    {
+      "key": "videoId",
+      "value": "",
+      "type": "string",
+      "description": "Automatically set by Upload video or List videos."
     }
   ],
   "item": [
@@ -91,7 +103,7 @@
     },
     {
       "name": "Plans",
-      "description": "List plans publicly. Current plan/change requests require Sign in. Free has 5 monthly credits per mode; Pro has 20 per mode; Max is Coming Soon.",
+      "description": "List plans publicly. Current plan/change requests require Sign in. Free has 5 monthly credits per image mode and 2 per video mode; Pro has 20 per image mode and 6 per video mode; Max is Coming Soon.",
       "item": [
         {
           "name": "List plans",
@@ -109,9 +121,10 @@
                 "exec": [
                   "pm.test('Plans endpoint succeeds', () => pm.response.to.have.status(200));",
                   "pm.test('Plans are ordered Free, Pro, Max', () => pm.expect(pm.response.json().data.plans.map((plan) => plan.slug)).to.eql(['free', 'pro', 'max']));",
-                  "pm.test('Free quota is five per mode', () => { const plans = pm.response.json().data.plans; const free = plans.find((plan) => plan.slug === 'free'); pm.expect(free.creditsPerMode).to.eql({ textToImage: 5, imageToImage: 5, enhanceImage: 5 }); });",
-                  "pm.test('Image upload quotas differ by plan', () => { const plans = pm.response.json().data.plans; const free = plans.find((plan) => plan.slug === 'free'); const pro = plans.find((plan) => plan.slug === 'pro'); pm.expect(free.imageUploads).to.eql({ monthlyLimit: 10, storageLimitBytes: 104857600, storageLimitMegabytes: 100 }); pm.expect(pro.imageUploads).to.eql({ monthlyLimit: 50, storageLimitBytes: 524288000, storageLimitMegabytes: 500 }); });",
-                  "pm.test('Pro quota is twenty per mode', () => { const plans = pm.response.json().data.plans; const pro = plans.find((plan) => plan.slug === 'pro'); pm.expect(pro.creditsPerMode).to.eql({ textToImage: 20, imageToImage: 20, enhanceImage: 20 }); });",
+                  "pm.test('Free plan exposes image and video quotas', () => { const plans = pm.response.json().data.plans; const free = plans.find((plan) => plan.slug === 'free'); pm.expect(free.creditsPerMode).to.eql({ textToImage: 5, imageToImage: 5, textToVideo: 2, imageToVideo: 2, videoToVideo: 2 }); pm.expect(free.monthlyCredits).to.eql(16); });",
+                  "pm.test('Video library limits match plans', () => { const plans = pm.response.json().data.plans; pm.expect(plans.find((plan) => plan.slug === 'free').videoLibrary).to.eql({ limit: 5, maxFileSizeBytes: 26214400 }); pm.expect(plans.find((plan) => plan.slug === 'pro').videoLibrary).to.eql({ limit: 15, maxFileSizeBytes: 26214400 }); });",
+                  "pm.test('Image upload and library quotas differ by plan', () => { const plans = pm.response.json().data.plans; const free = plans.find((plan) => plan.slug === 'free'); const pro = plans.find((plan) => plan.slug === 'pro'); pm.expect(free.imageUploads).to.eql({ monthlyLimit: 10, libraryImageLimit: 10, storageLimitBytes: 104857600, storageLimitMegabytes: 100 }); pm.expect(pro.imageUploads).to.eql({ monthlyLimit: 50, libraryImageLimit: 30, storageLimitBytes: 524288000, storageLimitMegabytes: 500 }); });",
+                  "pm.test('Pro plan exposes image and video quotas', () => { const plans = pm.response.json().data.plans; const pro = plans.find((plan) => plan.slug === 'pro'); pm.expect(pro.creditsPerMode).to.eql({ textToImage: 20, imageToImage: 20, textToVideo: 6, imageToVideo: 6, videoToVideo: 6 }); pm.expect(pro.monthlyCredits).to.eql(58); });",
                   "pm.test('Max is marked Coming Soon', () => { const plans = pm.response.json().data.plans; const max = plans.find((plan) => plan.slug === 'max'); pm.expect(max.comingSoon).to.eql(true); pm.expect(max.available).to.eql(false); });"
                 ]
               }
@@ -333,6 +346,266 @@
       ]
     },
     {
+      "name": "Generations",
+      "description": "Gemini image and video generation. Requires sign-in, Gemini model access, Cloudinary, and Redis. Generation requests run asynchronously.",
+      "item": [
+        {
+          "name": "Create text-to-image generation",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mode\": \"text-to-image\",\n  \"prompt\": \"A quiet beach at sunset, cinematic natural light\",\n  \"aspectRatio\": \"16:9\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/v1/generations",
+            "description": "Requires sign-in. Returns HTTP 202 with a generation ID; poll Get generation status until completed or failed."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Generation request is accepted', () => pm.response.to.have.status(202));",
+                  "pm.test('Generation ID is returned', () => { const generation = pm.response.json().data.generation; pm.expect(generation.id).to.be.a('string'); pm.collectionVariables.set('generationId', generation.id); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create image-to-image generation",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mode\": \"image-to-image\",\n  \"sourceImageId\": \"{{imageId}}\",\n  \"prompt\": \"Turn this into a watercolor illustration\",\n  \"aspectRatio\": \"1:1\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/v1/generations",
+            "description": "Upload an image first; uses the imageId variable from the Images folder. Returns a generation ID to poll."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Generation request is accepted', () => pm.response.to.have.status(202));",
+                  "pm.test('Generation ID is returned', () => { const generation = pm.response.json().data.generation; pm.expect(generation.id).to.be.a('string'); pm.collectionVariables.set('generationId', generation.id); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create text-to-video generation",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mode\": \"text-to-video\",\n  \"prompt\": \"A cinematic drone shot over a green valley at sunrise\",\n  \"aspectRatio\": \"16:9\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/v1/generations",
+            "description": "Creates a short video through Gemini Omni Flash. Returns a generation ID to poll."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Video generation request is accepted', () => pm.response.to.have.status(202));",
+                  "pm.test('Video generation ID is saved', () => { const generation = pm.response.json().data.generation; pm.expect(generation.id).to.be.a('string'); pm.collectionVariables.set('generationId', generation.id); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create image-to-video generation",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mode\": \"image-to-video\",\n  \"sourceImageId\": \"{{imageId}}\",\n  \"prompt\": \"Animate this landscape with slowly moving clouds\",\n  \"aspectRatio\": \"16:9\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/v1/generations",
+            "description": "Requires an imageId from the Images folder. Returns a generation ID to poll."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Video generation request is accepted', () => pm.response.to.have.status(202));",
+                  "pm.test('Video generation ID is saved', () => { const generation = pm.response.json().data.generation; pm.expect(generation.id).to.be.a('string'); pm.collectionVariables.set('generationId', generation.id); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create video-to-video generation",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mode\": \"video-to-video\",\n  \"sourceVideoId\": \"{{videoId}}\",\n  \"prompt\": \"Reimagine this clip as a stop-motion animation\",\n  \"aspectRatio\": \"16:9\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/v1/generations",
+            "description": "Requires a videoId from the Videos folder. Returns a generation ID to poll."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Video generation request is accepted', () => pm.response.to.have.status(202));",
+                  "pm.test('Video generation ID is saved', () => { const generation = pm.response.json().data.generation; pm.expect(generation.id).to.be.a('string'); pm.collectionVariables.set('generationId', generation.id); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get generation status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/generations/{{generationId}}",
+            "description": "Poll after creating a generation. A completed job includes the generated image URL; failed jobs return a stable error code."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Generation status request succeeds', () => pm.response.to.have.status(200));",
+                  "pm.test('Generation has a known status', () => pm.expect(['QUEUED', 'PROCESSING', 'COMPLETED', 'FAILED', 'CANCELLED']).to.include(pm.response.json().data.generation.status));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Videos",
+      "description": "Source MP4 upload and generated video library. Free: 5 videos; Pro: 15. Maximum source upload is 25 MB. Sign in first.",
+      "item": [
+        {
+          "name": "Upload video",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [{ "key": "video", "type": "file", "src": "" }]
+            },
+            "url": "{{baseUrl}}/api/v1/videos",
+            "description": "Select one MP4 video up to 25 MB. The returned video ID is saved to videoId."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Video upload succeeds', () => pm.response.to.have.status(201));",
+                  "pm.test('Uploaded video is returned', () => { const video = pm.response.json().data.video; pm.expect(video.url).to.be.a('string'); pm.expect(video.format).to.eql('mp4'); pm.collectionVariables.set('videoId', video.id); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List videos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/videos",
+            "description": "Lists this user's source and generated videos and current library capacity."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Video library loads', () => pm.response.to.have.status(200));",
+                  "pm.test('Video library reports limits', () => pm.expect(pm.response.json().data.library).to.have.keys('used', 'limit', 'remaining', 'maxFileSizeBytes'));",
+                  "if (pm.response.code === 200) { const videos = pm.response.json().data.videos; if (videos.length > 0) pm.collectionVariables.set('videoId', videos[0].id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get video",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/videos/{{videoId}}",
+            "description": "Returns the selected video owned by the signed-in user."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('videoId')) throw new Error('Run Upload video or List videos first.');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete video",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/videos/{{videoId}}",
+            "description": "Deletes the selected owned video from Cloudinary and the library."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('videoId')) throw new Error('Run Upload video or List videos first.');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Video deletion succeeds', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) pm.collectionVariables.unset('videoId');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "Credits",
       "description": "Run after Sign in. Displays this user's current UTC-month usage and recent ledger activity.",
       "item": [
@@ -342,7 +615,7 @@
             "method": "GET",
             "header": [],
             "url": "{{baseUrl}}/api/v1/credits",
-            "description": "Requires login. Shows remaining monthly credits separately for Text-to-Image, Image-to-Image, and Enhance Image."
+            "description": "Requires login. Shows remaining monthly credits separately for each image and video generation mode."
           },
           "event": [
             {
@@ -351,7 +624,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Credit summary succeeds', () => pm.response.to.have.status(200));",
-                  "pm.test('All three generation modes have separate quotas', () => pm.expect(Object.keys(pm.response.json().data.credits.modes)).to.eql(['textToImage', 'imageToImage', 'enhanceImage']));"
+                  "pm.test('Credit summary lists image and video generation modes', () => pm.expect(Object.keys(pm.response.json().data.credits.modes)).to.eql(['textToImage', 'imageToImage', 'textToVideo', 'imageToVideo', 'videoToVideo']));"
                 ]
               }
             }
@@ -370,7 +643,7 @@
     },
     {
       "name": "Images",
-      "description": "Image upload and library endpoints. Sign in first. Free: 10 uploads/month and 100 MB active storage. Pro: 50 uploads/month and 500 MB active storage. Each upload is capped at 10 MB, 4096 x 4096 pixels, and 16 megapixels. Deleting frees storage, not monthly upload count.",
+      "description": "Image upload and library endpoints. Sign in first. Free: keep 10 images, 10 uploads/month, and 100 MB active storage. Pro: keep 30 images, 50 uploads/month, and 500 MB active storage. Each upload is capped at 10 MB, 4096 x 4096 pixels, and 16 megapixels. Deleting frees a library slot/storage, not monthly upload count.",
       "item": [
         {
           "name": "Upload image",
@@ -420,7 +693,7 @@
                 "exec": [
                   "pm.test('Image library loads', () => pm.response.to.have.status(200));",
                   "pm.test('Image library includes pagination', () => pm.expect(pm.response.json().data.pagination).to.have.property('total'));",
-                  "pm.test('Image library reports quota usage', () => { const usage = pm.response.json().data.uploadUsage; pm.expect(usage.monthlyUploads).to.have.keys('used', 'limit', 'remaining'); pm.expect(usage.storage).to.have.keys('usedBytes', 'limitBytes', 'remainingBytes'); });",
+                  "pm.test('Image library reports upload, count, and storage usage', () => { const usage = pm.response.json().data.uploadUsage; pm.expect(usage.monthlyUploads).to.have.keys('used', 'limit', 'remaining'); pm.expect(usage.libraryImages).to.have.keys('used', 'limit', 'remaining'); pm.expect(usage.storage).to.have.keys('usedBytes', 'limitBytes', 'remainingBytes'); });",
                   "if (pm.response.code === 200) { const images = pm.response.json().data.images; if (images.length > 0) { pm.collectionVariables.set('imageId', images[0].id); console.log('Saved first imageId:', images[0].id); } else { pm.collectionVariables.unset('imageId'); console.log('No images found; imageId cleared.'); } }"
                 ]
               }

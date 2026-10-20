@@ -5,10 +5,16 @@ import { env } from '../config/env.js';
 export type GenerationJobData = {
   generationId: string;
   userId: string;
-  mode: 'text-to-image' | 'image-to-image' | 'enhance';
-  prompt?: string;
-  sourceImageUrl?: string;
-  settings: Record<string, unknown>;
+  mode:
+    | 'text-to-image'
+    | 'image-to-image'
+    | 'text-to-video'
+    | 'image-to-video'
+    | 'video-to-video';
+  prompt: string;
+  sourceImageId?: string;
+  sourceVideoId?: string;
+  aspectRatio: '1:1' | '3:2' | '4:3' | '16:9' | '9:16';
 };
 
 const queueName = 'image-generation';
@@ -41,6 +47,8 @@ export function createGenerationWorker(
   const worker = new Worker<GenerationJobData>(queueName, processor, {
     connection: createQueueConnection(),
     concurrency: 2,
+    lockDuration: Math.max(60_000, env.GENERATION_TIMEOUT_MS + 30_000),
+    maxStalledCount: 1,
   });
 
   worker.on('completed', (job) => {

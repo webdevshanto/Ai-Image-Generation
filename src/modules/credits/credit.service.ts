@@ -78,12 +78,28 @@ export async function getCreditSummary(userId: string, now = new Date()) {
           usedByMode.get(GenerationMode.IMAGE_TO_IMAGE) ?? 0,
         ),
       },
-      enhanceImage: {
-        limit: limits.ENHANCE_IMAGE,
-        used: usedByMode.get(GenerationMode.ENHANCE_IMAGE) ?? 0,
+      textToVideo: {
+        limit: limits.TEXT_TO_VIDEO,
+        used: usedByMode.get(GenerationMode.TEXT_TO_VIDEO) ?? 0,
         remaining: remainingQuota(
-          limits.ENHANCE_IMAGE,
-          usedByMode.get(GenerationMode.ENHANCE_IMAGE) ?? 0,
+          limits.TEXT_TO_VIDEO,
+          usedByMode.get(GenerationMode.TEXT_TO_VIDEO) ?? 0,
+        ),
+      },
+      imageToVideo: {
+        limit: limits.IMAGE_TO_VIDEO,
+        used: usedByMode.get(GenerationMode.IMAGE_TO_VIDEO) ?? 0,
+        remaining: remainingQuota(
+          limits.IMAGE_TO_VIDEO,
+          usedByMode.get(GenerationMode.IMAGE_TO_VIDEO) ?? 0,
+        ),
+      },
+      videoToVideo: {
+        limit: limits.VIDEO_TO_VIDEO,
+        used: usedByMode.get(GenerationMode.VIDEO_TO_VIDEO) ?? 0,
+        remaining: remainingQuota(
+          limits.VIDEO_TO_VIDEO,
+          usedByMode.get(GenerationMode.VIDEO_TO_VIDEO) ?? 0,
         ),
       },
     },

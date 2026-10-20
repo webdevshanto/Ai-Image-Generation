@@ -15,7 +15,9 @@ enum UserRole {
 enum GenerationMode {
   TEXT_TO_IMAGE
   IMAGE_TO_IMAGE
-  ENHANCE_IMAGE
+  TEXT_TO_VIDEO
+  IMAGE_TO_VIDEO
+  VIDEO_TO_VIDEO
 }
 
 enum GenerationStatus {
@@ -87,6 +89,8 @@ model User {
   updatedAt               DateTime                 @updatedAt
   generations             GenerationJob[]
   assets                  ImageAsset[]
+  videoAssets             VideoAsset[]
+  videoUploadReservations VideoUploadReservation[]
   imageUploadUsages       ImageUploadUsage[]
   imageUploadReservations ImageUploadReservation[]
   creditTransactions      CreditTransaction[]
@@ -136,6 +140,7 @@ model GenerationJob {
   prompt             String?
   negativePrompt     String?
   settings           Json?
+  sourceVideoId      String?
   provider           String?
   model              String?
   creditsUsed        Int                 @default(0)
@@ -147,6 +152,8 @@ model GenerationJob {
   updatedAt          DateTime            @updatedAt
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   assets             ImageAsset[]
+  videoAssets        VideoAsset[]
+  sourceVideo        VideoAsset?         @relation("VideoGenerationSource", fields: [sourceVideoId], references: [id], onDelete: SetNull)
   creditTransactions CreditTransaction[]
   feedback           Feedback[]
 
@@ -172,6 +179,42 @@ model ImageAsset {
 
   @@index([userId, createdAt])
   @@index([generationId])
+}
+
+model VideoAsset {
+  id                String          @id @default(cuid())
+  userId            String
+  generationId      String?
+  type              VideoAssetType
+  url               String
+  publicId          String
+  format            String?
+  fileSizeBytes     Int             @default(0)
+  deletionPending   Boolean         @default(false)
+  createdAt         DateTime        @default(now())
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  generation        GenerationJob?  @relation(fields: [generationId], references: [id], onDelete: SetNull)
+  sourceGenerations GenerationJob[] @relation("VideoGenerationSource")
+
+  @@index([userId, createdAt])
+  @@index([generationId])
+}
+
+model VideoUploadReservation {
+  id            String   @id
+  userId        String
+  publicId      String
+  fileSizeBytes Int
+  expiresAt     DateTime
+  createdAt     DateTime @default(now())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+enum VideoAssetType {
+  SOURCE
+  RESULT
 }
 
 model ImageUploadUsage {
@@ -208,8 +251,12 @@ model Plan {
   monthlyCredits         Int            @default(0)
   textToImageCredits     Int            @default(0)
   imageToImageCredits    Int            @default(0)
-  enhanceImageCredits    Int            @default(0)
+  textToVideoCredits     Int            @default(0)
+  imageToVideoCredits    Int            @default(0)
+  videoToVideoCredits    Int            @default(0)
   monthlyImageUploads    Int            @default(0)
+  libraryImageLimit      Int            @default(0)
+  libraryVideoLimit      Int            @default(0)
   imageStorageLimitBytes Int            @default(0)
   isActive               Boolean        @default(true)
   isComingSoon           Boolean        @default(false)

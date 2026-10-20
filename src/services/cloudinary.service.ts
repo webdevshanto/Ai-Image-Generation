@@ -9,6 +9,10 @@ const isConfigured = Boolean(
   env.CLOUDINARY_API_SECRET,
 );
 
+export function isCloudinaryConfigured() {
+  return isConfigured;
+}
+
 // Avoid initializing the SDK with empty credentials during local development.
 if (isConfigured) {
   cloudinary.config({
@@ -77,6 +81,36 @@ export async function uploadImageBuffer(
   }
 }
 
+export async function uploadVideoBuffer(buffer: Buffer, publicId: string) {
+  ensureConfigured();
+
+  try {
+    return await new Promise<Awaited<ReturnType<typeof uploadImage>>>(
+      (resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          {
+            resource_type: 'video',
+            format: 'mp4',
+            public_id: publicId,
+            unique_filename: false,
+          },
+          (error, result) => {
+            if (error || !result) {
+              reject(error ?? new Error('Cloudinary returned no video result'));
+              return;
+            }
+            resolve(result);
+          },
+        );
+
+        Readable.from([buffer]).pipe(uploadStream);
+      },
+    );
+  } catch {
+    throw new ExternalServiceError('Cloudinary video upload failed');
+  }
+}
+
 export async function deleteImage(publicId: string) {
   ensureConfigured();
 
@@ -86,5 +120,17 @@ export async function deleteImage(publicId: string) {
     });
   } catch {
     throw new ExternalServiceError('Cloudinary image deletion failed');
+  }
+}
+
+export async function deleteVideo(publicId: string) {
+  ensureConfigured();
+
+  try {
+    return await cloudinary.uploader.destroy(publicId, {
+      resource_type: 'video',
+    });
+  } catch {
+    throw new ExternalServiceError('Cloudinary video deletion failed');
   }
 }

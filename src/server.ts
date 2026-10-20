@@ -3,8 +3,13 @@ import { env } from './config/env.js';
 import { prisma } from './db/prisma.js';
 import { redis } from './db/redis.js';
 import { closeGenerationQueue } from './queues/generation.queue.js';
+import {
+  closeGenerationWorker,
+  startGenerationWorker,
+} from './queues/generation.worker.js';
 
 const port = env.PORT;
+startGenerationWorker();
 const server = app.listen(port, () => {
   console.info(`[INFO] Server listening at http://localhost:${port}`);
 });
@@ -37,6 +42,7 @@ async function shutdown(signal: string) {
         ? Promise.resolve(redis.disconnect())
         : redis.quit(),
       closeGenerationQueue(),
+      closeGenerationWorker(),
     ]);
 
     clearTimeout(forceExit);

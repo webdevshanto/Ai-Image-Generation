@@ -34,7 +34,10 @@ export const changePasswordSchema = z
       });
     }
   })
-  .transform(({ confirmPassword: _confirmPassword, ...input }) => input);
+  .transform(({ currentPassword, newPassword }) => ({
+    currentPassword,
+    newPassword,
+  }));
 
 export const updateProfileSchema = z.object({
   firstName: z.string().trim().min(1).max(80),

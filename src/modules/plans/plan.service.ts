@@ -17,8 +17,12 @@ function planView(plan: {
   monthlyCredits: number;
   textToImageCredits: number;
   imageToImageCredits: number;
-  enhanceImageCredits: number;
+  textToVideoCredits: number;
+  imageToVideoCredits: number;
+  videoToVideoCredits: number;
   monthlyImageUploads: number;
+  libraryImageLimit: number;
+  libraryVideoLimit: number;
   imageStorageLimitBytes: number;
   isActive: boolean;
   isComingSoon: boolean;
@@ -32,14 +36,21 @@ function planView(plan: {
     creditsPerMode: {
       textToImage: plan.textToImageCredits,
       imageToImage: plan.imageToImageCredits,
-      enhanceImage: plan.enhanceImageCredits,
+      textToVideo: plan.textToVideoCredits,
+      imageToVideo: plan.imageToVideoCredits,
+      videoToVideo: plan.videoToVideoCredits,
     },
     imageUploads: {
       monthlyLimit: plan.monthlyImageUploads,
+      libraryImageLimit: plan.libraryImageLimit,
       storageLimitBytes: plan.imageStorageLimitBytes,
       storageLimitMegabytes: Math.floor(
         plan.imageStorageLimitBytes / (1024 * 1024),
       ),
+    },
+    videoLibrary: {
+      limit: plan.libraryVideoLimit,
+      maxFileSizeBytes: 25 * 1024 * 1024,
     },
     available: plan.isActive && !plan.isComingSoon,
     purchasable:

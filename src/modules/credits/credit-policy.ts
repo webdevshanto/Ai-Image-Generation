@@ -10,8 +10,12 @@ export function quotaForMode(plan: Plan, mode: GenerationMode): number {
       return plan.textToImageCredits;
     case 'IMAGE_TO_IMAGE':
       return plan.imageToImageCredits;
-    case 'ENHANCE_IMAGE':
-      return plan.enhanceImageCredits;
+    case 'TEXT_TO_VIDEO':
+      return plan.textToVideoCredits;
+    case 'IMAGE_TO_VIDEO':
+      return plan.imageToVideoCredits;
+    case 'VIDEO_TO_VIDEO':
+      return plan.videoToVideoCredits;
   }
 }
 
@@ -23,6 +27,8 @@ export function quotaByMode(plan: Plan) {
   return {
     TEXT_TO_IMAGE: plan.textToImageCredits,
     IMAGE_TO_IMAGE: plan.imageToImageCredits,
-    ENHANCE_IMAGE: plan.enhanceImageCredits,
+    TEXT_TO_VIDEO: plan.textToVideoCredits,
+    IMAGE_TO_VIDEO: plan.imageToVideoCredits,
+    VIDEO_TO_VIDEO: plan.videoToVideoCredits,
   };
 }
