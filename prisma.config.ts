@@ -5,8 +5,7 @@ export default defineConfig({
   schema: 'prisma/schema.prisma',
   migrations: {
     path: 'prisma/migrations',
-    // Use Neon's direct connection for schema changes and seed operations.
-    seed: 'tsx prisma/seed.ts',
+    // Use Neon's direct connection for schema changes.
   },
   datasource: {
     url: env('DIRECT_URL'),

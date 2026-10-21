@@ -19,19 +19,6 @@ const envSchema = z.object({
     ),
   REDIS_URL: z.string().default('redis://localhost:6379'),
   JWT_SECRET: z.string().min(16).default('development-secret-change-it'),
-  CLOUDINARY_CLOUD_NAME: z.string().optional(),
-  CLOUDINARY_API_KEY: z.string().optional(),
-  CLOUDINARY_API_SECRET: z.string().optional(),
-  GEMINI_API_KEY: z.string().optional(),
-  IMAGE_PROVIDER_API_KEY: z.string().optional(),
-  GEMINI_IMAGE_MODEL: z.string().default('gemini-nano-banana-2.1'),
-  GEMINI_VIDEO_MODEL: z.string().default('gemini-omni-1.1-flash'),
-  GENERATION_TIMEOUT_MS: z.coerce
-    .number()
-    .int()
-    .positive()
-    .max(300_000)
-    .default(300_000),
   APP_BASE_URL: z.string().url().default('http://localhost:3000'),
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().default(587),
@@ -45,7 +32,3 @@ const envSchema = z.object({
 });
 
 export const env = envSchema.parse(process.env);
-
-export function getGeminiApiKey() {
-  return env.GEMINI_API_KEY ?? env.IMAGE_PROVIDER_API_KEY;
-}

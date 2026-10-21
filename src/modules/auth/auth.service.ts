@@ -4,12 +4,9 @@ import jwt from 'jsonwebtoken';
 import { env } from '../../config/env.js';
 import { prisma } from '../../db/prisma.js';
 import { AuthTokenType } from '../../generated/prisma/client.js';
-import type { UserRole } from '../../generated/prisma/client.js';
-import { deleteImage, deleteVideo } from '../../services/cloudinary.service.js';
 import { sendAuthEmail } from '../../services/email.service.js';
 import {
   ConflictError,
-  ExternalServiceError,
   UnauthorizedError,
   ValidationError,
 } from '../../utils/api-error.js';
@@ -59,7 +56,6 @@ function toPublicUser(user: {
   name: string | null;
   firstName: string | null;
   lastName: string | null;
-  role: UserRole;
   emailVerifiedAt: Date | null;
   createdAt: Date;
 }) {
@@ -69,7 +65,6 @@ function toPublicUser(user: {
     name: user.name,
     firstName: user.firstName,
     lastName: user.lastName,
-    role: user.role,
     emailVerifiedAt: user.emailVerifiedAt,
     emailVerified: Boolean(user.emailVerifiedAt),
     createdAt: user.createdAt,
@@ -103,7 +98,6 @@ export async function loginUser(input: LoginInput) {
     name: user.name,
     firstName: user.firstName,
     lastName: user.lastName,
-    role: user.role,
     emailVerifiedAt: user.emailVerifiedAt,
     emailVerified: Boolean(user.emailVerifiedAt),
     createdAt: user.createdAt,
@@ -169,7 +163,6 @@ export async function rotateRefreshToken(refreshToken: string) {
         name: true,
         firstName: true,
         lastName: true,
-        role: true,
         isActive: true,
         emailVerifiedAt: true,
         createdAt: true,
@@ -264,7 +257,6 @@ export async function findCurrentUser(userId: string) {
       name: true,
       firstName: true,
       lastName: true,
-      role: true,
       emailVerifiedAt: true,
       createdAt: true,
     },
@@ -365,7 +357,6 @@ export async function verifyEmail(input: VerifyEmailInput) {
           name: true,
           firstName: true,
           lastName: true,
-          role: true,
           emailVerifiedAt: true,
           createdAt: true,
         },
@@ -573,7 +564,6 @@ export async function updateProfile(userId: string, input: UpdateProfileInput) {
         name: true,
         firstName: true,
         lastName: true,
-        role: true,
         emailVerifiedAt: true,
         createdAt: true,
       },
@@ -614,26 +604,11 @@ export async function deleteAccount(userId: string, input: DeleteAccountInput) {
     where: { id: userId },
     select: {
       passwordHash: true,
-      assets: { select: { publicId: true } },
-      videoAssets: { select: { publicId: true } },
-      videoUploadReservations: { select: { publicId: true } },
     },
   });
 
   if (!user || !(await compare(input.password, user.passwordHash))) {
     throw new UnauthorizedError('Password confirmation failed');
-  }
-
-  try {
-    for (const asset of user.assets) await deleteImage(asset.publicId);
-    for (const video of user.videoAssets) await deleteVideo(video.publicId);
-    for (const reservation of user.videoUploadReservations) {
-      await deleteVideo(reservation.publicId);
-    }
-  } catch {
-    throw new ExternalServiceError(
-      'Could not remove stored images; the account was not deleted',
-    );
   }
 
   await prisma.user.delete({ where: { id: userId } });
